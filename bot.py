@@ -182,8 +182,16 @@ if __name__ == "__main__":
         asyncio.run(main())
     except RuntimeError as e:
         if "cannot close a running event loop" in str(e).lower():
+            # Si ya hay un loop corriendo, usamos ese
+            import nest_asyncio
+            nest_asyncio.apply()
             loop = asyncio.get_event_loop()
-            loop.create_task(main())
-            loop.run_forever()
+            loop.run_until_complete(main())
+        elif "no current event loop" in str(e).lower():
+            # Si no hay loop activo, creamos uno
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(main())
         else:
             raise
+
