@@ -1,153 +1,156 @@
+import os, json
+from datetime import datetime
+from oauth2client.service_account import ServiceAccountCredentials
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
-    MessageHandler,
-    ConversationHandler,
     ContextTypes,
+    MessageHandler,
     filters,
+    ConversationHandler,
 )
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
-import nest_asyncio
-import asyncio
 
-# Estados
+# Estados de la conversación
 MENU, PRODUCTO, CANTIDAD_V, PRECIO, NOMBRE, EDAD, DNI, CANTIDAD_P, TIPO_GASTO, MONTO_GASTO, DETALLE_GASTO = range(11)
 
-# Google Sheets setup
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
+# Configuración de acceso a Google Sheets
+scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+if os.getenv("GOOGLE_CREDS_JSON"):
+    creds_dict = json.loads(os.environ["GOOGLE_CREDS_JSON"])
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+else:
+    creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
+
 client = gspread.authorize(creds)
 sheet_ventas = client.open("RegistroBot").worksheet("Ventas")
 sheet_pacientes = client.open("RegistroBot").worksheet("Pacientes")
 sheet_gastos = client.open("RegistroBot").worksheet("Gastos")
 
-# Comienzo
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    keyboard = [["Registrar una venta", "Registrar un paciente"], ["Registrar gasto"]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text("¡Hola! ¿Qué acción querés realizar?", reply_markup=reply_markup)
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    reply_keyboard = [["Registrar venta", "Registrar paciente", "Registrar gasto"], ["Ver resumen"]]
+    markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
+    await update.message.reply_text("¡Hola! ¿Qué te gustaría hacer?", reply_markup=markup)
     return MENU
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text.lower()
+
     if "venta" in text:
-        await update.message.reply_text("🛒 ¿Qué producto se vendió?")
+        await update.message.reply_text("¿Qué producto se vendió?")
         return PRODUCTO
     elif "paciente" in text:
-        await update.message.reply_text("🩺 ¿Nombre del paciente?")
+        await update.message.reply_text("Nombre del paciente:")
         return NOMBRE
     elif "gasto" in text:
-        keyboard = [["Insumos club", "Insumos obra", "Insumos personal"]]
-        reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
-        await update.message.reply_text("🧾 ¿Qué tipo de gasto querés registrar?", reply_markup=reply_markup)
+        reply_keyboard = [["Insumos club", "Insumos obra", "Insumos personal"]]
+        markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
+        await update.message.reply_text("Seleccioná el tipo de gasto:", reply_markup=markup)
         return TIPO_GASTO
+    elif "resumen" in text:
+        return await resumen(update, context)
     else:
-        await update.message.reply_text("Por favor, elegí una opción válida.")
+        await update.message.reply_text("Opción no válida. Elegí una opción del menú.")
         return MENU
 
-# Flujo de ventas
-async def producto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+# Venta
+async def producto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["producto"] = update.message.text
-    await update.message.reply_text("¿Cuántas unidades se vendieron?")
+    await update.message.reply_text("¿Cantidad vendida?")
     return CANTIDAD_V
 
-async def cantidad_v(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["cantidad"] = int(update.message.text)
-    await update.message.reply_text("¿Cuál fue el precio unitario?")
+async def cantidad_v(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["cantidad"] = update.message.text
+    await update.message.reply_text("¿Precio unitario?")
     return PRECIO
 
-async def precio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    precio = float(update.message.text)
+async def precio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["precio"] = update.message.text
     producto = context.user_data["producto"]
     cantidad = context.user_data["cantidad"]
-    total = precio * cantidad
-    fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    usuario = update.message.from_user.username or update.message.from_user.first_name
-    sheet_ventas.append_row([producto, cantidad, precio, total, fecha, usuario])
-    await update.message.reply_text(
-        f"✅ Venta registrada:\nProducto: {producto}\nCantidad: {cantidad}\nPrecio: ${precio}\n"
-        f"Total: ${total}\nFecha: {fecha}\nUsuario: {usuario}"
-    )
+    precio = context.user_data["precio"]
+    total = float(cantidad) * float(precio)
+    sheet_ventas.append_row([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), producto, cantidad, precio, total])
+    await update.message.reply_text("✅ Venta registrada correctamente.")
     return ConversationHandler.END
 
-# Flujo de pacientes
-async def nombre(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+# Paciente
+async def nombre(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["nombre"] = update.message.text
-    await update.message.reply_text("¿Edad del paciente?")
+    await update.message.reply_text("Edad:")
     return EDAD
 
-async def edad(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["edad"] = int(update.message.text)
-    await update.message.reply_text("¿DNI del paciente?")
+async def edad(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["edad"] = update.message.text
+    await update.message.reply_text("DNI:")
     return DNI
 
-async def dni(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def dni(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["dni"] = update.message.text
-    await update.message.reply_text("¿Cantidad a registrar? (ej: sesiones, medicamentos, etc.)")
+    await update.message.reply_text("Cantidad de sesiones:")
     return CANTIDAD_P
 
-async def cantidad_p(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    cantidad = int(update.message.text)
-    nombre = context.user_data["nombre"]
-    edad = context.user_data["edad"]
-    dni = context.user_data["dni"]
-    fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    usuario = update.message.from_user.username or update.message.from_user.first_name
-    sheet_pacientes.append_row([nombre, edad, dni, cantidad, fecha, usuario])
-    await update.message.reply_text(
-        f"✅ Paciente registrado:\nNombre: {nombre}\nEdad: {edad}\nDNI: {dni}\n"
-        f"Cantidad: {cantidad}\nFecha: {fecha}\nUsuario: {usuario}"
-    )
+async def cantidad_p(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["cantidad_p"] = update.message.text
+    sheet_pacientes.append_row([
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        context.user_data["nombre"],
+        context.user_data["edad"],
+        context.user_data["dni"],
+        context.user_data["cantidad_p"]
+    ])
+    await update.message.reply_text("✅ Paciente registrado correctamente.")
     return ConversationHandler.END
 
-# Flujo de gastos
-async def tipo_gasto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+# Gasto
+async def tipo_gasto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["tipo_gasto"] = update.message.text
-    await update.message.reply_text("¿Cuál es el monto del gasto?")
+    await update.message.reply_text("Monto del gasto:")
     return MONTO_GASTO
 
-async def monto_gasto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["monto_gasto"] = float(update.message.text)
-    await update.message.reply_text("Ingresá una breve descripción del gasto:")
+async def monto_gasto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["monto_gasto"] = update.message.text
+    await update.message.reply_text("Descripción breve del gasto:")
     return DETALLE_GASTO
 
-async def detalle_gasto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    tipo = context.user_data["tipo_gasto"]
-    monto = context.user_data["monto_gasto"]
-    detalle = update.message.text
-    fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    usuario = update.message.from_user.username or update.message.from_user.first_name
-    sheet_gastos.append_row([tipo, monto, detalle, fecha, usuario])
-    await update.message.reply_text(
-        f"✅ Gasto registrado:\nTipo: {tipo}\nMonto: ${monto}\nDetalle: {detalle}\n"
-        f"Fecha: {fecha}\nUsuario: {usuario}"
-    )
+async def detalle_gasto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["detalle"] = update.message.text
+    sheet_gastos.append_row([
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        context.user_data["tipo_gasto"],
+        context.user_data["monto_gasto"],
+        context.user_data["detalle"]
+    ])
+    await update.message.reply_text("✅ Gasto registrado correctamente.")
     return ConversationHandler.END
 
-# Comando resumen
-async def resumen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    total_ventas = len(sheet_ventas.get_all_values()) - 1
-    total_pacientes = len(sheet_pacientes.get_all_values()) - 1
-    total_gastos = len(sheet_gastos.get_all_values()) - 1
-    await update.message.reply_text(
-        f"📊 Resumen general:\n\n"
-        f"- Ventas registradas: {total_ventas}\n"
-        f"- Pacientes registrados: {total_pacientes}\n"
-        f"- Gastos registrados: {total_gastos}"
-    )
+# Resumen
+async def resumen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ventas = sheet_ventas.get_all_values()[1:]
+    pacientes = sheet_pacientes.get_all_values()[1:]
+    gastos = sheet_gastos.get_all_values()[1:]
 
-# Cancelar
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    total_ventas = sum(float(v[4]) for v in ventas if v[4])
+    total_pacientes = len(pacientes)
+    total_gastos = sum(float(g[2]) for g in gastos if g[2])
+
+    resumen_text = (
+        f"📊 *Resumen general:*\n"
+        f"- Ventas totales: ${total_ventas:.2f}\n"
+        f"- Pacientes registrados: {total_pacientes}\n"
+        f"- Gastos totales: ${total_gastos:.2f}"
+    )
+    await update.message.reply_text(resumen_text, parse_mode="Markdown")
+    return ConversationHandler.END
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Operación cancelada.")
     return ConversationHandler.END
 
-# Main
-nest_asyncio.apply()
 async def main():
-    app = ApplicationBuilder().token("7950410156:AAG2vO_4fQUeyyoILbpVRiBrVqrAstIiKYs").build()
+    TOKEN = os.environ.get("TELEGRAM_TOKEN") or "TOKEN_NO_DEFINIDO"
+    app = ApplicationBuilder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
@@ -169,7 +172,9 @@ async def main():
 
     app.add_handler(conv_handler)
     app.add_handler(CommandHandler("resumen", resumen))
+
     await app.run_polling()
 
-asyncio.run(main())
-
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
