@@ -113,10 +113,10 @@ async def monto_gasto(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def detalle_gasto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["detalle"] = update.message.text
     sheet_gastos.append_row([
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         context.user_data["tipo_gasto"],
         context.user_data["monto_gasto"],
-        context.user_data["detalle"]
+        context.user_data["detalle"],
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     ])
     await update.message.reply_text("✅ Gasto registrado correctamente.")
     return ConversationHandler.END
@@ -137,7 +137,7 @@ async def resumen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total_gastos = 0
     for g in gastos:
         try:
-            total_gastos += float(g[2])
+            total_gastos += float(g[1])
         except (ValueError, IndexError):
             continue
 
@@ -190,13 +190,11 @@ if __name__ == "__main__":
         asyncio.run(main())
     except RuntimeError as e:
         if "cannot close a running event loop" in str(e).lower():
-            # Si ya hay un loop corriendo, usamos ese
             import nest_asyncio
             nest_asyncio.apply()
             loop = asyncio.get_event_loop()
             loop.run_until_complete(main())
         elif "no current event loop" in str(e).lower():
-            # Si no hay loop activo, creamos uno
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             loop.run_until_complete(main())
