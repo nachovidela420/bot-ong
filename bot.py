@@ -67,7 +67,9 @@ async def precio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cantidad = context.user_data["cantidad"]
     precio = context.user_data["precio"]
     total = float(cantidad) * float(precio)
-    sheet_ventas.append_row([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), producto, cantidad, precio, total])
+    fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    usuario = update.effective_user.username or "Anon"
+    sheet_ventas.append_row([producto, cantidad, precio, total, fecha, usuario])
     await update.message.reply_text("✅ Venta registrada correctamente.")
     return ConversationHandler.END
 
@@ -89,12 +91,15 @@ async def dni(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cantidad_p(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["cantidad_p"] = update.message.text
+    fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    usuario = update.effective_user.username or "Anon"
     sheet_pacientes.append_row([
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         context.user_data["nombre"],
         context.user_data["edad"],
         context.user_data["dni"],
-        context.user_data["cantidad_p"]
+        context.user_data["cantidad_p"],
+        fecha,
+        usuario
     ])
     await update.message.reply_text("✅ Paciente registrado correctamente.")
     return ConversationHandler.END
@@ -112,11 +117,14 @@ async def monto_gasto(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def detalle_gasto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["detalle"] = update.message.text
+    fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    usuario = update.effective_user.username or "Anon"
     sheet_gastos.append_row([
         context.user_data["tipo_gasto"],
         context.user_data["monto_gasto"],
         context.user_data["detalle"],
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        fecha,
+        usuario
     ])
     await update.message.reply_text("✅ Gasto registrado correctamente.")
     return ConversationHandler.END
@@ -130,7 +138,7 @@ async def resumen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total_ventas = 0
     for v in ventas:
         try:
-            total_ventas += float(v[4])
+            total_ventas += float(v[3])
         except (ValueError, IndexError):
             continue
 
