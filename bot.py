@@ -83,7 +83,6 @@ async def precio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     precio = context.user_data["precio"]
     total = cantidad * precio
 
-    # Actualizar stock
     stock_values = sheet_stock.get_all_values()
     for i, row in enumerate(stock_values):
         if row[0] == producto:
@@ -94,13 +93,12 @@ async def precio(update: Update, context: ContextTypes.DEFAULT_TYPE):
             sheet_stock.update_cell(i + 1, 2, nuevo_stock)
             break
 
-    # Guardar venta
     sheet_ventas.append_row([
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         producto,
         cantidad,
         precio,
         total,
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "RailwayBot"
     ])
     await update.message.reply_text("✅ Venta registrada correctamente.")
@@ -125,11 +123,11 @@ async def dni(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cantidad_p(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["cantidad_p"] = update.message.text
     sheet_pacientes.append_row([
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         context.user_data["nombre"],
         context.user_data["edad"],
         context.user_data["dni"],
         context.user_data["cantidad_p"],
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "RailwayBot"
     ])
     await update.message.reply_text("✅ Paciente registrado correctamente.")
@@ -149,10 +147,10 @@ async def monto_gasto(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def detalle_gasto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["detalle"] = update.message.text
     sheet_gastos.append_row([
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         context.user_data["tipo_gasto"],
         context.user_data["monto_gasto"],
         context.user_data["detalle"],
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "RailwayBot"
     ])
     await update.message.reply_text("✅ Gasto registrado correctamente.")
@@ -164,9 +162,9 @@ async def resumen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pacientes = sheet_pacientes.get_all_values()[1:]
     gastos = sheet_gastos.get_all_values()[1:]
 
-    total_ventas = sum(float(v[4]) for v in ventas if len(v) > 4 and v[4].replace('.', '', 1).isdigit())
+    total_ventas = sum(float(v[3]) for v in ventas if len(v) > 3 and v[3].replace('.', '', 1).isdigit())
     total_pacientes = len(pacientes)
-    total_gastos = sum(float(g[2]) for g in gastos if len(g) > 2 and g[2].replace('.', '', 1).isdigit())
+    total_gastos = sum(float(g[1]) for g in gastos if len(g) > 1 and g[1].replace('.', '', 1).isdigit())
 
     resumen_text = (
         f"📊 *Resumen general:*\n"
