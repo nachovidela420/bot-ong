@@ -1,5 +1,4 @@
 import os, json
-from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
@@ -11,18 +10,15 @@ from telegram.ext import (
     ConversationHandler,
 )
 import gspread
+from datetime import datetime
 
 # Estados de la conversación
 MENU, PRODUCTO, CANTIDAD_V, PRECIO, NOMBRE, EDAD, DNI, CANTIDAD_P, TIPO_GASTO, MONTO_GASTO, DETALLE_GASTO = range(11)
 
-# Configuración de acceso a Google Sheets
-scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-if os.getenv("GOOGLE_CREDS_JSON"):
-    creds_dict = json.loads(os.environ["GOOGLE_CREDS_JSON"])
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-else:
-    creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
-
+# Credenciales desde variables de entorno (Railway)
+scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
+creds_dict = json.loads(os.environ["GOOGLE_CREDS_JSON"])
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 sheet_ventas = client.open("RegistroBot").worksheet("Ventas")
 sheet_pacientes = client.open("RegistroBot").worksheet("Pacientes")
@@ -131,9 +127,21 @@ async def resumen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pacientes = sheet_pacientes.get_all_values()[1:]
     gastos = sheet_gastos.get_all_values()[1:]
 
-    total_ventas = sum(float(v[4]) for v in ventas if v[4])
+    total_ventas = 0
+    for v in ventas:
+        try:
+            total_ventas += float(v[4])
+        except (ValueError, IndexError):
+            continue
+
+    total_gastos = 0
+    for g in gastos:
+        try:
+            total_gastos += float(g[2])
+        except (ValueError, IndexError):
+            continue
+
     total_pacientes = len(pacientes)
-    total_gastos = sum(float(g[2]) for g in gastos if g[2])
 
     resumen_text = (
         f"📊 *Resumen general:*\n"
@@ -149,7 +157,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def main():
-    TOKEN = os.environ.get("TELEGRAM_TOKEN") or "TOKEN_NO_DEFINIDO"
+    TOKEN = os.environ["TELEGRAM_TOKEN"]
     app = ApplicationBuilder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
@@ -194,4 +202,3 @@ if __name__ == "__main__":
             loop.run_until_complete(main())
         else:
             raise
-
